@@ -31,6 +31,7 @@ import json
 import os
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 EMA_PERIOD = 200
 
@@ -322,7 +323,34 @@ def send_telegram_file(file_path, caption=""):
         print(f"[Warning] Telegram file fail: {e}")
 
 
+def is_market_open_today():
+    """
+    Nifty 50 (^NSEI) ka latest candle check karta hai. Agar uski date
+    aaj (IST) ki nahi hai, to aaj market band tha (weekend / NSE holiday).
+    Check khud fail ho jaye to True return karta hai (scan chalne dete hain).
+    """
+    try:
+        today_ist = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        idx = yf.download("^NSEI", period="7d", interval="1d",
+                          progress=False, auto_adjust=True)
+        idx = flatten_columns(idx)
+        if idx is None or idx.empty:
+            return True
+        last_candle = idx.index[-1].date()
+        if last_candle != today_ist:
+            print(f"Aaj ({today_ist}) market band tha. Last candle: {last_candle}. "
+                  "Scan skip kar raha hoon.")
+            return False
+        return True
+    except Exception as e:
+        print(f"[Warning] Market open check fail ({e}). Scan chala raha hoon.")
+        return True
+
+
 def main():
+    if not is_market_open_today():
+        return
+
     symbols = get_nse_stock_list()
     if not symbols:
         print("Stock list khali hai, script rok raha hoon.")
